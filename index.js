@@ -20,6 +20,17 @@ mongoose.connect(process.env.MONGODB_URI, {
 // register
 // Adjust the path to your User model
 
+const corsOptions = {
+  origin: '*',
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.get("/",(req,res) =>{
+  res.json({
+      data:"hello"
+  });
+});
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
 
