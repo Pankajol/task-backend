@@ -1,116 +1,113 @@
 const express = require('express');
 const cors = require("cors");
-
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const User = require('./models/User'); // Adjust the path based on your project structure
+const User = require('./models/User'); // Adjust path if necessary
 require('dotenv').config();
 
 const app = express();
-app.use(express.json()); // Middleware to parse JSON data
+app.use(express.json());
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, { 
-    useNewUrlParser: true, 
-    useUnifiedTopology: true 
-})
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
-// register
-// Adjust the path to your User model
-
+// CORS settings
 const corsOptions = {
   origin: '*',
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
-
 app.use(cors(corsOptions));
-app.get("/",(req,res) =>{
+
+// Optimized database connection
+let cachedDb = null;
+async function connectToDatabase(uri) {
+  if (cachedDb) {
+    return cachedDb;
+  }
+  try {
+    const client = await mongoose.connect(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    cachedDb = client;
+    console.log('MongoDB connected');
+    return client;
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    throw new Error('Database connection failed');
+  }
+}
+
+// Sample route to verify server status
+app.get("/", (req, res) => {
   res.json({
-      data:"hello"
+    data: "Server is up and running!",
   });
 });
+
+// Register route
 app.post('/register', async (req, res) => {
-    const { email, password } = req.body;
+  await connectToDatabase(process.env.MONGODB_URI); // Ensure DB connection
 
-    // Basic validation
-    if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
-    }
-
-    try {
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        // Create a new user
-        const newUser = new User({ email, password });
-        await newUser.save();
-
-        return res.status(201).json({ message: "User registered successfully!" });
-    } catch (error) {
-        console.error("Registration error:", error);
-        return res.status(500).json({ message: "Internal server error" });
-    }
-});
-
-// Login endpoint
-app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
-  // Basic validation
-  if (!email) {
-      return res.status(400).json({ message: "Email is required" });
-  }
-  if (!password) {
-      return res.status(400).json({ message: "Password is required" });
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
   }
 
   try {
-      // Find user by email
-      const userInfo = await User.findOne({ email });
-      if (!userInfo) {
-          return res.status(404).json({ message: "User not found" });
-      }
+    // Password hashing with a reduced salt round for performance
+    const hashedPassword = await bcrypt.hash(password, 8);
 
-      console.log("User Info:", userInfo); // Log retrieved user information
-      console.log("Provided Password:", password); // Log provided password
-      console.log("Stored Password (hashed):", userInfo.password); // Log stored hashed password
+    // Create and save a new user
+    const newUser = new User({ email, password: hashedPassword });
+    await newUser.save();
 
-      // Compare provided password with stored hashed password
-      const passwordMatch = await bcrypt.compare(password, userInfo.password);
-      console.log("Password match:", passwordMatch); // This should log true if the password is correct
-
-      if (!passwordMatch) {
-          return res.status(401).json({ message: "Invalid credentials" });
-      }
-
-      // Create user payload
-      const userPayload = {
-          id: userInfo._id,
-          email: userInfo.email,
-          role: userInfo.role || 'user',
-      };
-
-      // Generate a JWT token
-      const accessToken = jwt.sign(userPayload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
-
-      return res.json({
-          message: "Login successful",
-          userRole: userInfo.role, // 'admin' or 'user'
-          email,
-          accessToken,
-      });
+    return res.status(201).json({ message: "User registered successfully!" });
   } catch (error) {
-      console.error("Login error:", error);
-      return res.status(500).json({ message: "Internal server error" });
+    console.error("Registration error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 });
 
+// Login route
+app.post('/login', async (req, res) => {
+  await connectToDatabase(process.env.MONGODB_URI);
 
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  try {
+    // Find user and validate password
+    const userInfo = await User.findOne({ email });
+    if (!userInfo) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, userInfo.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Generate JWT token
+    const userPayload = { id: userInfo._id, email: userInfo.email, role: userInfo.role || 'user' };
+    const accessToken = jwt.sign(userPayload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
+
+    return res.json({
+      message: "Login successful",
+      userRole: userInfo.role,
+      email,
+      accessToken,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 // Server setup
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
