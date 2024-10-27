@@ -11,10 +11,11 @@ app.use(express.json());
 
 // CORS settings
 const corsOptions = {
-  origin: '*',
-  optionsSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
+    origin: '*', // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify allowed HTTP methods
+    allowedHeaders: ['Content-Type', 'Authorization'] // Headers that your app might use
+  };
+  app.use(cors(corsOptions));
 
 // Optimized database connection
 let cachedDb = null;
