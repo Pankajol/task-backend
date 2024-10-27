@@ -11,7 +11,7 @@ app.use(express.json());
 
 // CORS settings
 const corsOptions = {
-    origin: '*', // Allow all origins
+    origin: 'exp://127.0.0.1:8081', // Allow all origins
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Specify allowed HTTP methods
     allowedHeaders: ['Content-Type', 'Authorization'] // Headers that your app might use
   };
